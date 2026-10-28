@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#16120f">
+  <meta name="description" content="Chassette — non-stop audio news from trusted sources, on tape.">
+  <meta name="app-version" content="{{VERSION}}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Chassette</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="deck">
+    <header class="brand">
+      <h1>CHASSETTE</h1>
+      <span class="onair"><i></i>ON AIR</span>
+    </header>
+
+    <div class="cassette" id="cassette" aria-hidden="true">
+      <div class="label">
+        <div class="label-top">
+          <span class="side">A</span>
+          <span class="label-src" id="labelSource">Loading tape…</span>
+          <span class="label-len">NEWS 60</span>
+        </div>
+        <div class="label-title" id="labelTitle">&nbsp;</div>
+        <div class="label-stripes"></div>
+      </div>
+      <div class="window">
+        <div class="reel left"><div class="tape"></div><div class="hub"></div></div>
+        <div class="ribbon"></div>
+        <div class="reel right"><div class="tape"></div><div class="hub"></div></div>
+      </div>
+      <div class="head"><i></i><i></i><i></i><i></i></div>
+    </div>
+
+    <section class="now" aria-live="polite">
+      <a id="nowTitle" class="now-title" target="_blank" rel="noopener">Tuning in…</a>
+      <div class="now-meta"><a id="nowSource" target="_blank" rel="noopener"></a><span id="nowWhen"></span></div>
+    </section>
+
+    <div class="progress">
+      <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Seek">
+      <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+    </div>
+
+    <nav class="keys" aria-label="Player controls">
+      <button type="button" id="prev" aria-label="Previous">
+        <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+      </button>
+      <button type="button" id="play" class="play" aria-label="Play" aria-pressed="false">
+        <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+      </button>
+      <button type="button" id="next" aria-label="Next">
+        <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg>
+      </button>
+    </nav>
+
+    <p class="status" id="status" role="status"></p>
+
+    <ol class="queue" id="queue" aria-label="On the tape"></ol>
+
+    <footer>Audio &amp; titles © their publishers · streamed from the original source</footer>
+  </main>
+  <audio id="audio" preload="auto"></audio>
+</body>
+</html>

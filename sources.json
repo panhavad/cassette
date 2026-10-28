@@ -1,0 +1,11 @@
+[
+  { "name": "NPR News Now", "publisher": "NPR", "feed": "https://feeds.npr.org/500005/podcast.xml", "site": "https://www.npr.org/podcasts/500005/npr-news-now", "limit": 1, "maxAgeHours": 6 },
+  { "name": "NPR Up First", "publisher": "NPR", "feed": "https://feeds.npr.org/510318/podcast.xml", "site": "https://www.npr.org/podcasts/510318/up-first", "limit": 1 },
+  { "name": "BBC Global News", "publisher": "BBC World Service", "feed": "https://podcasts.files.bbci.co.uk/p02nq0gn.rss", "site": "https://www.bbc.co.uk/programmes/p02nq0gn", "limit": 2 },
+  { "name": "CBC The World This Hour", "publisher": "CBC", "feed": "https://www.cbc.ca/podcasting/includes/hourlynews.xml", "site": "https://www.cbc.ca/listen/cbc-podcasts", "limit": 1, "maxAgeHours": 6 },
+  { "name": "The Guardian Today in Focus", "publisher": "The Guardian", "feed": "https://www.theguardian.com/news/series/todayinfocus/podcast.xml", "site": "https://www.theguardian.com/news/series/todayinfocus", "limit": 1 },
+  { "name": "NYT The Daily", "publisher": "The New York Times", "feed": "https://feeds.simplecast.com/54nAGcIl", "site": "https://www.nytimes.com/column/the-daily", "limit": 1 },
+  { "name": "WSJ What's News", "publisher": "The Wall Street Journal", "feed": "https://video-api.wsj.com/podcast/rss/wsj/whats-news", "site": "https://www.wsj.com/podcasts/whats-news", "limit": 2 },
+  { "name": "PBS News Hour", "publisher": "PBS", "feed": "https://www.pbs.org/newshour/feeds/rss/podcasts/show", "site": "https://www.pbs.org/newshour/", "limit": 1 },
+  { "name": "RFI International Report", "publisher": "RFI", "feed": "https://www.rfi.fr/en/podcasts/international-report/podcast", "site": "https://www.rfi.fr/en/podcasts/international-report/", "limit": 1 }
+]

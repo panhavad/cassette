@@ -1,0 +1,16 @@
+{
+  "name": "chassette",
+  "version": "1.0.0",
+  "description": "Non-stop audio news from trusted sources, played like a cassette radio. PWA, Docker, git auto-update.",
+  "private": true,
+  "license": "MIT",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node updater.js",
+    "dev": "node server.js",
+    "test": "node --test"
+  }
+}
