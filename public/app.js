@@ -76,6 +76,35 @@
     return e;
   }
 
+  /* Marquee: titles that don't fit scroll in a loop, like a radio display. */
+
+  const MARQUEE_SPEED = 32; // px per second
+
+  function setMarquee(node, text) {
+    if (node.dataset.text === text) return;
+    node.dataset.text = text;
+    const copy = el('span', 'seg copy', text);
+    copy.setAttribute('aria-hidden', 'true');
+    const track = el('span', 'track');
+    track.append(el('span', 'seg', text), copy);
+    node.replaceChildren(track);
+    if (node.isConnected) fitMarquee(node);
+  }
+
+  function fitMarquee(node) {
+    const seg = node.querySelector('.seg');
+    if (!seg) return;
+    node.classList.remove('run');
+    if (seg.getBoundingClientRect().width <= node.clientWidth + 1) return;
+    node.classList.add('run');
+    const shift = seg.getBoundingClientRect().width;
+    node.style.setProperty('--shift', `-${shift.toFixed(1)}px`);
+    node.style.setProperty('--dur', `${Math.max(4, shift / MARQUEE_SPEED).toFixed(1)}s`);
+    node.style.setProperty('--steps', String(Math.max(1, Math.round(shift / 2))));
+  }
+
+  const fitAll = (root = document) => root.querySelectorAll('.marquee').forEach(fitMarquee);
+
   /* Rendering */
 
   const bar = $('bar');
@@ -113,8 +142,8 @@
     const seg = shown();
     $('labelFlag').textContent = seg ? flagOf(seg.country) : '';
     $('labelSource').textContent = seg ? seg.source : 'NO TAPE';
-    $('labelTitle').textContent = seg ? seg.title : '';
-    $('nowTitle').textContent = seg ? seg.title : 'NO SIGNAL';
+    setMarquee($('labelTitle'), seg ? seg.title : '');
+    setMarquee($('nowTitle'), seg ? seg.title : 'NO SIGNAL');
     const src = $('nowSource');
     if (seg) {
       src.textContent = seg.publisher && seg.publisher !== seg.source ? `${seg.source} · ${seg.publisher}` : seg.source;
@@ -137,8 +166,12 @@
     cells.forEach((c, i) => c.classList.toggle('on', i < lit));
     $('elapsed').textContent = fmt(elapsed);
     $('remain').textContent = `-${fmt(total - elapsed)}`;
-    $('packL').setAttribute('r', String(3 + Math.round(6 * (1 - p))));
-    $('packR').setAttribute('r', String(3 + Math.round(6 * p)));
+    const left = 3 + Math.round(6 * (1 - p));
+    const right = 3 + Math.round(6 * p);
+    $('packL').setAttribute('r', String(left));
+    $('packR').setAttribute('r', String(right));
+    $('ringL').setAttribute('r', String(left - 1.5));
+    $('ringR').setAttribute('r', String(right - 1.5));
   }
 
   let nextKey = '';
@@ -158,9 +191,12 @@
       const li = el('li');
       const src = el('span', 'src');
       src.append(el('span', 'flag', flagOf(s.country)), s.source);
-      li.append(el('span', 'at', `${s.projected ? '~' : ''}${clockText(s.start)}`), src, el('span', 'ttl', s.title));
+      const ttl = el('span', 'ttl marquee');
+      setMarquee(ttl, s.title);
+      li.append(el('span', 'at', `${s.projected ? '~' : ''}${clockText(s.start)}`), src, ttl);
       return li;
     }));
+    fitAll(ol);
   }
 
   function renderWhere() {
@@ -458,6 +494,14 @@
 
   // Timer backup for UI + boundaries (media events drive switching while audio plays in the background).
   setInterval(tick, 1000);
+
+  // Re-measure scrolling titles once the pixel font is in and whenever the layout width changes.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitAll());
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => fitAll(), 150);
+  });
 
   render();
   const wasLive = sessionStorage.getItem(WAS_LIVE_KEY);

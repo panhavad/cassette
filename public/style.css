@@ -127,12 +127,25 @@ a { color: inherit; }
 .label-top .flag { font-size: 3.2cqw; line-height: 1; }
 .label-top .flag:empty { display: none; }
 .label-src { overflow: hidden; text-overflow: ellipsis; }
-.label-title { top: 19.5%; font-size: 2.5cqw; line-height: 1.4; color: var(--plum); }
+.label-title { top: 19.5%; font-size: 2.5cqw; line-height: 1.4; color: var(--plum); text-overflow: clip; }
 
-.spin-b { opacity: 0; }
-.playing .spin-a { animation: frame 0.36s steps(1, end) infinite; }
-.playing .spin-b { animation: frame 0.36s steps(1, end) infinite reverse; }
-@keyframes frame { 0% { opacity: 1; } 50% { opacity: 0; } }
+/* Rolling tape: hubs + tape packs turn, tape runs across the window and the head (only while playing). */
+.hub, .roll { transform-box: fill-box; transform-origin: center; }
+.playing .hub { animation: roll 1s steps(8) infinite; }
+.playing .roll { animation: roll 3s steps(24) infinite; }
+.playing .tape-run { animation: run .5s steps(4) infinite; }
+@keyframes roll { to { transform: rotate(360deg); } }
+@keyframes run { to { stroke-dashoffset: -4; } }
+
+/* Marquee: long titles scroll like a radio display (JS adds .run + a duplicate copy for a seamless loop). */
+.marquee { overflow: hidden; white-space: nowrap; text-overflow: clip; }
+.marquee .track { display: inline-block; white-space: nowrap; }
+.marquee .seg { display: inline-block; }
+.marquee .copy { display: none; }
+.marquee.run .copy { display: inline-block; }
+.marquee.run .seg { padding-right: 3em; }
+.marquee.run .track { animation: marquee var(--dur, 10s) steps(var(--steps, 60)) infinite; }
+@keyframes marquee { to { transform: translateX(var(--shift, -100%)); } }
 
 /* LCD screen */
 .screen {
@@ -158,12 +171,10 @@ a { color: inherit; }
 .live-on .lamp { color: var(--red); animation: blink 1s steps(1, end) infinite; }
 .clock { font-variant-numeric: tabular-nums; }
 .now-title {
-  margin: 10px 0 4px;
-  min-height: 3.6em;
-  font-size: 11px;
-  line-height: 1.8;
+  margin: 12px 0 6px;
+  font-size: 12px;
+  line-height: 2;
   color: var(--ivory);
-  overflow-wrap: anywhere;
 }
 .now-src { margin: 0 0 10px; color: var(--sky); }
 .now-src a { text-decoration: none; }
@@ -221,7 +232,7 @@ a { color: inherit; }
 .next .at { color: var(--yellow); grid-row: span 2; }
 .next .src { color: var(--sky); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
 .next .src .flag { margin-right: 6px; }
-.next .ttl { color: var(--silver); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.next .ttl { color: var(--silver); min-width: 0; }
 .next li.empty { display: block; color: var(--slate); }
 
 footer { margin-top: auto; text-align: center; color: var(--lilac); font-size: 8px; line-height: 2; }
@@ -229,6 +240,7 @@ footer { margin-top: auto; text-align: center; color: var(--lilac); font-size: 8
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes pulse { 50% { background: var(--yellow); color: var(--black); } }
 
+/* Reduced motion only calms the blinking; the rolling tape and scrolling titles are the core display. */
 @media (prefers-reduced-motion: reduce) {
-  .playing .spin-a, .playing .spin-b, .live-on .lamp, .status:not(:empty), .blocked .key-live { animation: none; }
+  .live-on .lamp, .status:not(:empty), .blocked .key-live { animation: none; }
 }

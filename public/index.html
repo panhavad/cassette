@@ -45,28 +45,34 @@
         <rect x="6" y="31" width="68" height="2" fill="#ff004d"/>
         <rect x="20" y="15" width="40" height="12" fill="#000"/>
         <g fill="#ffccaa"><rect x="20" y="15" width="1" height="1"/><rect x="59" y="15" width="1" height="1"/><rect x="20" y="26" width="1" height="1"/><rect x="59" y="26" width="1" height="1"/></g>
-        <g clip-path="url(#win)" fill="#ab5236">
-          <circle id="packL" cx="29.5" cy="21.5" r="8"/>
-          <circle id="packR" cx="51.5" cy="21.5" r="4"/>
-          <rect x="22" y="25" width="36" height="1"/>
+        <g clip-path="url(#win)">
+          <g transform="translate(29.5 21.5)"><g class="roll">
+            <circle id="packL" r="8" fill="#ab5236"/>
+            <circle id="ringL" r="6.5" fill="none" stroke="#7e2553" stroke-width="1" stroke-dasharray="2 2.5"/>
+          </g></g>
+          <g transform="translate(51.5 21.5)"><g class="roll">
+            <circle id="packR" r="4" fill="#ab5236"/>
+            <circle id="ringR" r="2.5" fill="none" stroke="#7e2553" stroke-width="1" stroke-dasharray="2 2.5"/>
+          </g></g>
+          <line class="tape-run" x1="21" y1="25.5" x2="59" y2="25.5" stroke="#ab5236" stroke-width="1" stroke-dasharray="3 1"/>
         </g>
-        <g class="reel" transform="translate(29 21)">
+        <g transform="translate(29 21)"><g class="hub">
           <rect x="-2" y="-3" width="5" height="7" fill="#fff1e8"/><rect x="-3" y="-2" width="7" height="5" fill="#fff1e8"/>
-          <g class="spin-a" fill="#5f574f"><rect x="0" y="-2" width="1" height="5"/><rect x="-2" y="0" width="5" height="1"/></g>
-          <g class="spin-b" fill="#5f574f"><rect x="-2" y="-2" width="1" height="1"/><rect x="-1" y="-1" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="2" y="-2" width="1" height="1"/><rect x="1" y="-1" width="1" height="1"/><rect x="-1" y="1" width="1" height="1"/><rect x="-2" y="2" width="1" height="1"/></g>
+          <g fill="#5f574f"><rect x="0" y="-2" width="1" height="5"/><rect x="-2" y="0" width="5" height="1"/></g>
           <rect x="0" y="0" width="1" height="1" fill="#000"/>
-        </g>
-        <g class="reel" transform="translate(51 21)">
+        </g></g>
+        <g transform="translate(51 21)"><g class="hub">
           <rect x="-2" y="-3" width="5" height="7" fill="#fff1e8"/><rect x="-3" y="-2" width="7" height="5" fill="#fff1e8"/>
-          <g class="spin-a" fill="#5f574f"><rect x="0" y="-2" width="1" height="5"/><rect x="-2" y="0" width="5" height="1"/></g>
-          <g class="spin-b" fill="#5f574f"><rect x="-2" y="-2" width="1" height="1"/><rect x="-1" y="-1" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="2" y="-2" width="1" height="1"/><rect x="1" y="-1" width="1" height="1"/><rect x="-1" y="1" width="1" height="1"/><rect x="-2" y="2" width="1" height="1"/></g>
+          <g fill="#5f574f"><rect x="0" y="-2" width="1" height="5"/><rect x="-2" y="0" width="5" height="1"/></g>
           <rect x="0" y="0" width="1" height="1" fill="#000"/>
-        </g>
+        </g></g>
         <g fill="#000"><rect x="24" y="38" width="32" height="2"/><rect x="22" y="40" width="36" height="9"/></g>
+        <line class="tape-run" x1="23" y1="40.5" x2="57" y2="40.5" stroke="#ab5236" stroke-width="1" stroke-dasharray="3 1"/>
+        <g fill="#c2c3c7"><rect x="23" y="40" width="2" height="2"/><rect x="55" y="40" width="2" height="2"/></g>
         <g fill="#5f574f"><rect x="28" y="44" width="2" height="2"/><rect x="35" y="43" width="3" height="3"/><rect x="42" y="43" width="3" height="3"/><rect x="50" y="44" width="2" height="2"/></g>
       </svg>
       <div class="label-top"><span class="side">A</span><span class="flag" id="labelFlag"></span><span class="label-src" id="labelSource">NO TAPE</span></div>
-      <div class="label-title" id="labelTitle"></div>
+      <div class="label-title marquee" id="labelTitle"></div>
     </div>
 
     <section class="screen" aria-live="polite">
@@ -74,7 +80,7 @@
         <span class="lamp" id="lamp">STOPPED</span>
         <span class="clock" id="clock">--:--:--</span>
       </div>
-      <p class="now-title" id="nowTitle">TUNING…</p>
+      <div class="now-title marquee" id="nowTitle"></div>
       <p class="now-src"><a id="nowSource" target="_blank" rel="noopener"></a></p>
       <div class="bar" id="bar" aria-hidden="true"></div>
       <div class="times"><span id="elapsed">0:00</span><span id="remain">-0:00</span></div>

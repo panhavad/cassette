@@ -3,9 +3,9 @@
 Live audio-news radio with an 8-bit cassette look.
 
 Chassette finds news that publishers already offer **as audio** and plays it as a live radio station:
-- article audio from news sites ("listen to this article" players such as on
-  [The Japan Times](https://www.japantimes.co.jp/), The Straits Times, SCMP, Bangkok Post, Daily Maverick, NPR,
-  CNBC, Business Insider, The Indian Express);
+- article audio from news sites ("listen to this article" read-outs) — The Japan Times, Bloomberg, NBC News,
+  TIME, Los Angeles Times, CNBC, Business Insider, NPR, Deseret News, The Straits Times, The Business Times,
+  SCMP, Bangkok Post, Mint, The Indian Express and Daily Maverick;
 - news bulletins and podcasts from NPR, BBC, NHK, KBS, ABC, CBC, RTÉ, RNZ, Reuters, Al Jazeera, France 24 and others.
 
 Only the **title** (from the site's RSS feed), the **audio file URL**, and the **link to the original article** are
@@ -22,6 +22,7 @@ hears the same story at the same second. Opening the app (or pressing **LIVE**) 
 position; there is no seeking, skipping or rewinding.
 
 - Controls: **STOP** and **LIVE** only. `Space` toggles, `L` = live, `S` = stop.
+- The cassette rolls while on air (reels turn, tape runs past the head). Long titles scroll like a radio display.
 - **Up next** shows the coming stories with start times (`~` = forecast). It is display-only.
 - The server commits the current and next story per station. The rest is a forecast that can change when
   breaking news arrives; the newest story the station hasn't aired yet always goes next.
