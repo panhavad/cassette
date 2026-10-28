@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Aggregator } = require('./lib/feeds');
+const { resolveCountry, parseLanguages, rankForListener } = require('./lib/geo');
 
 const PORT = Number(process.env.PORT) || 8080;
 const VERSION = (process.env.GIT_SHA || 'dev').slice(0, 12);
@@ -22,6 +23,7 @@ const MIME = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.woff2': 'font/woff2',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
 };
@@ -118,7 +120,21 @@ async function handle(req, res) {
     if (!aggregator.updatedAt && aggregator.ready) {
       await Promise.race([aggregator.ready.catch(() => {}), new Promise((r) => setTimeout(r, 15000))]);
     }
-    return sendJson(res, 200, { version: VERSION, updatedAt: aggregator.updatedAt, items: aggregator.items });
+    const q = new URL(req.url, 'http://localhost').searchParams;
+    const languages = parseLanguages(q.get('lang') || req.headers['accept-language']);
+    const geo = { headers: req.headers, tz: q.get('tz'), languages };
+    const detected = resolveCountry(geo);
+    const { country, via } = q.get('country') ? resolveCountry({ ...geo, override: q.get('country') }) : detected;
+    return sendJson(res, 200, {
+      version: VERSION,
+      updatedAt: aggregator.updatedAt,
+      country,
+      countryVia: via,
+      detected: detected.country,
+      detectedVia: detected.via,
+      countries: aggregator.countries(),
+      items: rankForListener(aggregator.items, { country, languages }),
+    });
   }
 
   if (pathname === '/api/version') return sendJson(res, 200, { version: VERSION });

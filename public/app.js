@@ -8,7 +8,9 @@
   const VERSION = document.querySelector('meta[name="app-version"]').content;
   const PLAYED_KEY = 'chassette:played';
   const RESUME_KEY = 'chassette:resume';
+  const COUNTRY_KEY = 'chassette:country';
   const REFRESH_MS = 5 * 60 * 1000;
+  const WORLDWIDE = 'WW';
 
   let items = [];
   let current = null;
@@ -17,6 +19,7 @@
   let blocked = false;
   let errorStreak = 0;
   let dragging = false;
+  let geo = { country: null, via: null, detected: null, detectedVia: null, countries: [] };
 
   function load(store, key, fallback) {
     try {
@@ -48,6 +51,25 @@
   const indexOf = (item) => (item ? items.findIndex((i) => i.id === item.id) : -1);
   const nextUnplayed = (exclude) => items.find((i) => !played.has(i.id) && (!exclude || i.id !== exclude.id));
 
+  const regionNames = (() => {
+    try { return new Intl.DisplayNames(['en'], { type: 'region' }); } catch { return null; }
+  })();
+  const flagOf = (code) => (code && /^[A-Z]{2}$/.test(code) && code !== WORLDWIDE
+    ? String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0)))
+    : '🌐');
+  const nameOf = (code) => {
+    if (!code || code === WORLDWIDE) return 'Worldwide';
+    try { return (regionNames && regionNames.of(code)) || code; } catch { return code; }
+  };
+  const VIA = { manual: 'chosen by you', network: 'from your network', timezone: 'from your time zone', language: 'from your browser language', default: 'location unknown' };
+  const flagSpan = (code) => {
+    const s = document.createElement('span');
+    s.className = 'flag';
+    s.textContent = flagOf(code);
+    s.setAttribute('aria-hidden', 'true');
+    return s;
+  };
+
   function setStatus(text) { $('status').textContent = text || ''; }
 
   function markPlayed(item) {
@@ -61,6 +83,7 @@
 
   function renderNow() {
     if (!current) return;
+    $('labelFlag').textContent = flagOf(current.country);
     $('labelSource').textContent = current.source;
     $('labelTitle').textContent = current.title;
     const title = $('nowTitle');
@@ -73,36 +96,85 @@
     document.title = `${current.title} — Chassette`;
   }
 
+  function divider(code, text) {
+    const li = document.createElement('li');
+    li.className = 'divider';
+    li.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.textContent = text;
+    li.append(flagSpan(code), label);
+    return li;
+  }
+
   function renderQueue() {
     const ol = $('queue');
-    ol.replaceChildren(...items.map((item) => {
-      const li = document.createElement('li');
-      if (played.has(item.id)) li.classList.add('played');
-      if (current && item.id === current.id) li.classList.add('current');
+    const rows = [];
+    const local = geo.country && geo.country !== WORLDWIDE;
+    if (local && !items.some((i) => i.tier === 'local')) {
+      rows.push(divider(geo.country, `${nameOf(geo.country)} · no local audio yet`));
+    }
+    let tier = null;
+    for (const item of items) {
+      if (local && item.tier !== tier) {
+        tier = item.tier;
+        rows.push(tier === 'local' ? divider(geo.country, `Local · ${nameOf(geo.country)}`) : divider(WORLDWIDE, 'World'));
+      }
+      rows.push(queueRow(item));
+    }
+    ol.replaceChildren(...rows);
+  }
 
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      const t = document.createElement('span');
-      t.className = 'q-title';
-      t.textContent = item.title;
-      const m = document.createElement('span');
-      m.className = 'q-meta';
-      m.textContent = [item.source, ago(item.published), item.duration ? fmt(item.duration) : ''].filter(Boolean).join(' · ');
-      btn.append(t, m);
-      btn.addEventListener('click', () => play(item));
+  function queueRow(item) {
+    const li = document.createElement('li');
+    if (played.has(item.id)) li.classList.add('played');
+    if (current && item.id === current.id) li.classList.add('current');
 
-      const a = document.createElement('a');
-      a.className = 'q-link';
-      a.href = item.link || item.sourceUrl;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.textContent = '↗';
-      a.title = `Open on ${item.source}`;
-      a.setAttribute('aria-label', `Open “${item.title}” on ${item.source}`);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const t = document.createElement('span');
+    t.className = 'q-title';
+    t.textContent = item.title;
+    const m = document.createElement('span');
+    m.className = 'q-meta';
+    m.append(flagSpan(item.country), [item.source, ago(item.published), item.duration ? fmt(item.duration) : ''].filter(Boolean).join(' · '));
+    btn.append(t, m);
+    btn.addEventListener('click', () => play(item));
 
-      li.append(btn, a);
-      return li;
-    }));
+    const a = document.createElement('a');
+    a.className = 'q-link';
+    a.href = item.link || item.sourceUrl;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = '↗';
+    a.title = `Open on ${item.source}`;
+    a.setAttribute('aria-label', `Open “${item.title}” on ${item.source}`);
+
+    li.append(btn, a);
+    return li;
+  }
+
+  function renderWhere() {
+    const { country, via, detected, detectedVia, countries } = geo;
+    $('whereFlag').textContent = flagOf(country);
+    $('whereName').textContent = nameOf(country);
+    $('where').title = `News prioritized for ${nameOf(country)} (${VIA[via] || via}). Tap to change.`;
+
+    const select = $('whereSelect');
+    const chosen = load(localStorage, COUNTRY_KEY, '');
+    const opt = (value, text) => {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = text;
+      return o;
+    };
+    const codes = [...new Set([...countries, detected].filter((c) => c && c !== WORLDWIDE))]
+      .sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    select.replaceChildren(
+      opt('', `Auto: ${flagOf(detected)} ${nameOf(detected)} (${VIA[detectedVia] || detectedVia})`),
+      ...codes.map((c) => opt(c, `${flagOf(c)} ${nameOf(c)}`)),
+      opt(WORLDWIDE, '🌐 Worldwide (no priority)'),
+    );
+    select.value = chosen;
   }
 
   function setPlaying(on) {
@@ -204,24 +276,45 @@
   let refreshTimer = null;
   let lastRefresh = 0;
 
-  async function refresh() {
+  async function refresh(retune = false) {
     clearTimeout(refreshTimer);
     lastRefresh = Date.now();
     try {
-      const res = await fetch('/api/news', { cache: 'no-store' });
+      const params = new URLSearchParams();
+      try { params.set('tz', Intl.DateTimeFormat().resolvedOptions().timeZone || ''); } catch { /* no Intl tz */ }
+      params.set('lang', (navigator.languages || [navigator.language]).filter(Boolean).join(','));
+      const chosen = load(localStorage, COUNTRY_KEY, '');
+      if (chosen) params.set('country', chosen);
+
+      const res = await fetch(`/api/news?${params}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.version && data.version !== VERSION && VERSION !== '{{VERSION}}') requestUpdate();
+      geo = {
+        country: data.country,
+        via: data.countryVia,
+        detected: data.detected,
+        detectedVia: data.detectedVia,
+        countries: Array.isArray(data.countries) ? data.countries : [],
+      };
       items = Array.isArray(data.items) ? data.items : [];
-      if (current && indexOf(current) === -1) items.unshift(current);
+      renderWhere();
       renderQueue();
       if (!items.length) setStatus('No fresh audio on air yet — retrying…');
+      else if (retune) play(nextUnplayed() || items[0]);
       else if (!current) start();
     } catch {
       if (!items.length) setStatus('Searching for signal…');
     }
     refreshTimer = setTimeout(refresh, items.length ? REFRESH_MS : 10000);
   }
+
+  $('whereSelect').addEventListener('change', (e) => {
+    const value = e.target.value;
+    if (value) save(localStorage, COUNTRY_KEY, value);
+    else localStorage.removeItem(COUNTRY_KEY);
+    refresh(true);
+  });
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && Date.now() - lastRefresh > 60000) refresh();
@@ -272,13 +365,13 @@
 
   // Autoplay may be blocked until the first interaction; any tap on the page starts the tape.
   const unlock = (e) => {
-    if (!blocked || e.target.closest('button, a, input')) return;
+    if (!blocked || e.target.closest('button, a, input, select')) return;
     tryPlay();
   };
   document.addEventListener('pointerdown', unlock, true);
 
   document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('button, a, input')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('button, a, input, select')) return;
     if (e.code === 'Space' || e.key === 'k') { e.preventDefault(); toggle(); }
     else if (e.key === 'n') skip();
     else if (e.key === 'p') prev();

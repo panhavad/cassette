@@ -84,7 +84,7 @@ test('Aggregator applies freshness, per-source limit, source attribution and sur
   };
   const agg = new Aggregator(
     [
-      { name: 'Example', publisher: 'Example Media', feed: 'https://example.com/feed.xml', site: 'https://example.com/', limit: 5 },
+      { name: 'Example', publisher: 'Example Media', feed: 'https://example.com/feed.xml', site: 'https://example.com/', limit: 5, country: 'jp', lang: 'JA', scope: 'global' },
       { name: 'Broken', feed: 'https://broken.example/feed.xml' },
       { name: 'Disabled', feed: 'https://example.com/feed.xml?d', enabled: false },
     ],
@@ -95,6 +95,10 @@ test('Aggregator applies freshness, per-source limit, source attribution and sur
   assert.equal(items[0].source, 'Example');
   assert.equal(items[0].publisher, 'Example Media');
   assert.equal(items[0].sourceUrl, 'https://example.com/');
+  assert.equal(items[0].country, 'JP');
+  assert.equal(items[0].lang, 'ja');
+  assert.equal(items[0].scope, 'global');
+  assert.deepEqual(agg.countries(), ['JP']);
   assert.ok(agg.updatedAt);
 
   const limited = new Aggregator([{ name: 'X', feed: 'https://example.com/feed.xml', limit: 1 }], { fetch, log: { info() {}, warn() {} } });

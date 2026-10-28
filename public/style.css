@@ -9,6 +9,14 @@
   color-scheme: dark;
 }
 
+/* Country flag emoji everywhere (Windows has no flag glyphs). Only downloaded when a flag is shown. */
+@font-face {
+  font-family: "Twemoji Country Flags";
+  src: url("/fonts/TwemojiCountryFlags.woff2") format("woff2");
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  font-display: swap;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -33,8 +41,27 @@ a { color: inherit; }
 }
 
 /* Header */
-.brand { display: flex; justify-content: space-between; align-items: center; }
-.brand h1 { margin: 0; font-size: 13px; letter-spacing: .55em; font-weight: 700; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand h1 { margin: 0 auto 0 0; font-size: 13px; letter-spacing: .55em; font-weight: 700; }
+.flag { font-family: "Twemoji Country Flags", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-style: normal; letter-spacing: 0; }
+.where {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 46%;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.where:hover, .where:focus-within { border-color: var(--accent); }
+.where .flag { font-size: 15px; line-height: 1; }
+.where-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.where select { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; font: inherit; }
 .onair { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .25em; color: var(--muted); }
 .onair i { width: 7px; height: 7px; border-radius: 50%; background: #4a403a; }
 .playing .onair { color: var(--accent); }
@@ -71,6 +98,8 @@ a { color: inherit; }
 .side { display: grid; place-items: center; width: 4.4cqw; height: 4.4cqw; border-radius: .8cqw; background: var(--label-ink); color: var(--label); }
 .label-src { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .label-len { opacity: .6; }
+.label-top .flag { font-size: 3.6cqw; line-height: 1; }
+.label-top .flag:empty { display: none; }
 .label-title {
   margin-top: 1.4cqw;
   padding-bottom: .6cqw;
@@ -184,6 +213,7 @@ a { color: inherit; }
 /* Queue */
 .queue { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .queue li { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.queue li.divider { border-bottom: 0; }
 .queue button {
   flex: 1;
   min-width: 0;
@@ -207,6 +237,18 @@ a { color: inherit; }
 .queue .current { opacity: 1; }
 .queue .current .q-title { color: var(--accent); }
 .queue .current .q-title::before { content: "▶ "; }
+.queue .divider {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 14px 4px 6px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+}
+.queue .divider .flag { font-size: 14px; }
+.q-meta .flag { margin-right: 4px; }
 
 footer { margin-top: auto; text-align: center; color: var(--muted); font-size: 10px; letter-spacing: .04em; }
 

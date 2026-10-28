@@ -1,0 +1,8 @@
+TwemojiCountryFlags.woff2
+
+Font subset from "country-flag-emoji-polyfill" by Egbert Teeselink / TalkJS (MIT License)
+https://github.com/talkjs/country-flag-emoji-polyfill
+
+Flag graphics from Twemoji, Copyright Twitter, Inc and other contributors,
+licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+https://github.com/twitter/twemoji (via https://github.com/mozilla/twemoji-colr)

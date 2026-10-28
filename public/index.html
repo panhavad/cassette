@@ -19,6 +19,11 @@
   <main class="deck">
     <header class="brand">
       <h1>CHASSETTE</h1>
+      <label class="where" id="where" title="News is prioritized for this country">
+        <span class="flag" id="whereFlag">🌐</span>
+        <span class="where-name" id="whereName">Locating…</span>
+        <select id="whereSelect" aria-label="Prioritize news from"></select>
+      </label>
       <span class="onair"><i></i>ON AIR</span>
     </header>
 
@@ -26,6 +31,7 @@
       <div class="label">
         <div class="label-top">
           <span class="side">A</span>
+          <span class="flag" id="labelFlag"></span>
           <span class="label-src" id="labelSource">Loading tape…</span>
           <span class="label-len">NEWS 60</span>
         </div>
