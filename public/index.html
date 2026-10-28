@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#16120f">
-  <meta name="description" content="Chassette — non-stop audio news from trusted sources, on tape.">
+  <meta name="theme-color" content="#1d2b53">
+  <meta name="description" content="Chassette — live audio news radio for your country, on tape.">
   <meta name="app-version" content="{{VERSION}}">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -12,68 +12,87 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="preload" href="/fonts/PressStart2P-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
   <main class="deck">
-    <header class="brand">
-      <h1>CHASSETTE</h1>
-      <label class="where" id="where" title="News is prioritized for this country">
+    <header class="top">
+      <h1 class="logo">CHASSETTE</h1>
+      <label class="where" id="where">
         <span class="flag" id="whereFlag">🌐</span>
-        <span class="where-name" id="whereName">Locating…</span>
-        <select id="whereSelect" aria-label="Prioritize news from"></select>
+        <span class="where-name" id="whereName">TUNING</span>
+        <select id="whereSelect" aria-label="Station"></select>
       </label>
-      <span class="onair"><i></i>ON AIR</span>
+      <label class="where lang" id="langPill">
+        <span class="where-name" id="langName">EN</span>
+        <select id="langSelect" aria-label="Language"></select>
+      </label>
     </header>
 
-    <div class="cassette" id="cassette" aria-hidden="true">
-      <div class="label">
-        <div class="label-top">
-          <span class="side">A</span>
-          <span class="flag" id="labelFlag"></span>
-          <span class="label-src" id="labelSource">Loading tape…</span>
-          <span class="label-len">NEWS 60</span>
-        </div>
-        <div class="label-title" id="labelTitle">&nbsp;</div>
-        <div class="label-stripes"></div>
-      </div>
-      <div class="window">
-        <div class="reel left"><div class="tape"></div><div class="hub"></div></div>
-        <div class="ribbon"></div>
-        <div class="reel right"><div class="tape"></div><div class="hub"></div></div>
-      </div>
-      <div class="head"><i></i><i></i><i></i><i></i></div>
+    <div class="cassette" aria-hidden="true">
+      <svg viewBox="0 0 80 50" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+        <defs><clipPath id="win"><rect x="21" y="16" width="38" height="10"/></clipPath></defs>
+        <g fill="#000"><rect x="1" y="0" width="78" height="50"/><rect x="0" y="1" width="80" height="48"/></g>
+        <g fill="#5f574f"><rect x="2" y="1" width="76" height="48"/><rect x="1" y="2" width="78" height="46"/></g>
+        <rect x="2" y="1" width="76" height="1" fill="#83769c"/>
+        <rect x="1" y="2" width="1" height="46" fill="#83769c"/>
+        <rect x="2" y="48" width="76" height="1" fill="#000" opacity=".45"/>
+        <g fill="#c2c3c7"><rect x="3" y="3" width="2" height="2"/><rect x="75" y="3" width="2" height="2"/><rect x="3" y="45" width="2" height="2"/><rect x="75" y="45" width="2" height="2"/></g>
+        <rect x="6" y="4" width="68" height="31" fill="#ffccaa"/>
+        <rect x="6" y="29" width="68" height="2" fill="#ffa300"/>
+        <rect x="6" y="31" width="68" height="2" fill="#ff004d"/>
+        <rect x="20" y="15" width="40" height="12" fill="#000"/>
+        <g fill="#ffccaa"><rect x="20" y="15" width="1" height="1"/><rect x="59" y="15" width="1" height="1"/><rect x="20" y="26" width="1" height="1"/><rect x="59" y="26" width="1" height="1"/></g>
+        <g clip-path="url(#win)" fill="#ab5236">
+          <circle id="packL" cx="29.5" cy="21.5" r="8"/>
+          <circle id="packR" cx="51.5" cy="21.5" r="4"/>
+          <rect x="22" y="25" width="36" height="1"/>
+        </g>
+        <g class="reel" transform="translate(29 21)">
+          <rect x="-2" y="-3" width="5" height="7" fill="#fff1e8"/><rect x="-3" y="-2" width="7" height="5" fill="#fff1e8"/>
+          <g class="spin-a" fill="#5f574f"><rect x="0" y="-2" width="1" height="5"/><rect x="-2" y="0" width="5" height="1"/></g>
+          <g class="spin-b" fill="#5f574f"><rect x="-2" y="-2" width="1" height="1"/><rect x="-1" y="-1" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="2" y="-2" width="1" height="1"/><rect x="1" y="-1" width="1" height="1"/><rect x="-1" y="1" width="1" height="1"/><rect x="-2" y="2" width="1" height="1"/></g>
+          <rect x="0" y="0" width="1" height="1" fill="#000"/>
+        </g>
+        <g class="reel" transform="translate(51 21)">
+          <rect x="-2" y="-3" width="5" height="7" fill="#fff1e8"/><rect x="-3" y="-2" width="7" height="5" fill="#fff1e8"/>
+          <g class="spin-a" fill="#5f574f"><rect x="0" y="-2" width="1" height="5"/><rect x="-2" y="0" width="5" height="1"/></g>
+          <g class="spin-b" fill="#5f574f"><rect x="-2" y="-2" width="1" height="1"/><rect x="-1" y="-1" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="2" y="-2" width="1" height="1"/><rect x="1" y="-1" width="1" height="1"/><rect x="-1" y="1" width="1" height="1"/><rect x="-2" y="2" width="1" height="1"/></g>
+          <rect x="0" y="0" width="1" height="1" fill="#000"/>
+        </g>
+        <g fill="#000"><rect x="24" y="38" width="32" height="2"/><rect x="22" y="40" width="36" height="9"/></g>
+        <g fill="#5f574f"><rect x="28" y="44" width="2" height="2"/><rect x="35" y="43" width="3" height="3"/><rect x="42" y="43" width="3" height="3"/><rect x="50" y="44" width="2" height="2"/></g>
+      </svg>
+      <div class="label-top"><span class="side">A</span><span class="flag" id="labelFlag"></span><span class="label-src" id="labelSource">NO TAPE</span></div>
+      <div class="label-title" id="labelTitle"></div>
     </div>
 
-    <section class="now" aria-live="polite">
-      <a id="nowTitle" class="now-title" target="_blank" rel="noopener">Tuning in…</a>
-      <div class="now-meta"><a id="nowSource" target="_blank" rel="noopener"></a><span id="nowWhen"></span></div>
+    <section class="screen" aria-live="polite">
+      <div class="screen-top">
+        <span class="lamp" id="lamp">STOPPED</span>
+        <span class="clock" id="clock">--:--:--</span>
+      </div>
+      <p class="now-title" id="nowTitle">TUNING…</p>
+      <p class="now-src"><a id="nowSource" target="_blank" rel="noopener"></a></p>
+      <div class="bar" id="bar" aria-hidden="true"></div>
+      <div class="times"><span id="elapsed">0:00</span><span id="remain">-0:00</span></div>
     </section>
 
-    <div class="progress">
-      <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Seek">
-      <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
-    </div>
-
-    <nav class="keys" aria-label="Player controls">
-      <button type="button" id="prev" aria-label="Previous">
-        <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
-      </button>
-      <button type="button" id="play" class="play" aria-label="Play" aria-pressed="false">
-        <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg>
-        <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
-      </button>
-      <button type="button" id="next" aria-label="Next">
-        <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg>
-      </button>
+    <nav class="keys" aria-label="Radio">
+      <button type="button" id="stop" class="key key-stop" aria-label="Stop"><i class="ico ico-stop"></i>STOP</button>
+      <button type="button" id="live" class="key key-live" aria-label="Go live" aria-pressed="false"><i class="ico ico-live"></i>LIVE</button>
     </nav>
 
     <p class="status" id="status" role="status"></p>
 
-    <ol class="queue" id="queue" aria-label="On the tape"></ol>
+    <section class="next">
+      <h2>UP NEXT</h2>
+      <ol id="next"></ol>
+    </section>
 
-    <footer>Audio &amp; titles © their publishers · streamed from the original source</footer>
+    <footer>AUDIO &amp; TITLES © THEIR PUBLISHERS<br>STREAMED FROM THE ORIGINAL SOURCE</footer>
   </main>
   <audio id="audio" preload="auto"></audio>
 </body>

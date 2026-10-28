@@ -5,12 +5,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Aggregator } = require('./lib/feeds');
-const { resolveCountry, parseLanguages, rankForListener } = require('./lib/geo');
+const { resolveCountry, parseLanguages, normalizeLanguage } = require('./lib/geo');
+const { Broadcaster } = require('./lib/station');
 
 const PORT = Number(process.env.PORT) || 8080;
 const VERSION = (process.env.GIT_SHA || 'dev').slice(0, 12);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SOURCES_FILE = process.env.SOURCES_FILE || path.join(__dirname, 'sources.json');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const REFRESH_MS = Math.max(1, Number(process.env.REFRESH_MINUTES) || 10) * 60e3;
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 const MAX_HOOK_BODY = 5 * 1024 * 1024;
@@ -24,13 +26,14 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.woff2': 'font/woff2',
+  '.wav': 'audio/wav',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
 };
 const TEMPLATED = new Set(['index.html', 'sw.js']);
 const SECURITY_HEADERS = {
   'content-security-policy':
-    "default-src 'self'; media-src https: http:; img-src 'self' data:; script-src 'self'; style-src 'self'; " +
+    "default-src 'self'; media-src 'self' https: http:; img-src 'self' data:; script-src 'self'; style-src 'self'; " +
     "connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'strict-origin-when-cross-origin',
@@ -42,6 +45,7 @@ const aggregator = new Aggregator(JSON.parse(fs.readFileSync(SOURCES_FILE, 'utf8
   maxAgeHours: Number(process.env.MAX_AGE_HOURS) || undefined,
 });
 aggregator.start(REFRESH_MS).catch((err) => console.error('[feeds] initial refresh failed', err));
+const broadcaster = new Broadcaster(() => aggregator.items, { file: path.join(DATA_DIR, 'stations.json') });
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { ...SECURITY_HEADERS, ...headers });
@@ -116,7 +120,7 @@ async function handle(req, res) {
 
   if (pathname === '/healthz') return send(res, 200, 'ok', { 'content-type': 'text/plain', 'cache-control': 'no-store' });
 
-  if (pathname === '/api/news' && req.method === 'GET') {
+  if (pathname === '/api/live' && req.method === 'GET') {
     if (!aggregator.updatedAt && aggregator.ready) {
       await Promise.race([aggregator.ready.catch(() => {}), new Promise((r) => setTimeout(r, 15000))]);
     }
@@ -125,15 +129,19 @@ async function handle(req, res) {
     const geo = { headers: req.headers, tz: q.get('tz'), languages };
     const detected = resolveCountry(geo);
     const { country, via } = q.get('country') ? resolveCountry({ ...geo, override: q.get('country') }) : detected;
+    const language = normalizeLanguage(q.get('language'));
+    const { serverTime, schedule } = broadcaster.schedule(country, language);
     return sendJson(res, 200, {
       version: VERSION,
-      updatedAt: aggregator.updatedAt,
+      serverTime,
       country,
       countryVia: via,
       detected: detected.country,
       detectedVia: detected.via,
       countries: aggregator.countries(),
-      items: rankForListener(aggregator.items, { country, languages }),
+      language,
+      languages: aggregator.languages(),
+      schedule,
     });
   }
 
@@ -157,8 +165,24 @@ async function handle(req, res) {
 
   const file = loadStatic(pathname);
   if (!file) return send(res, 404, 'Not found', { 'content-type': 'text/plain' });
-  const headers = { 'content-type': file.type, etag: file.etag, 'cache-control': 'no-cache' };
+  const headers = { 'content-type': file.type, etag: file.etag, 'cache-control': 'no-cache', 'accept-ranges': 'bytes' };
   if (req.headers['if-none-match'] === file.etag) return send(res, 304, null, headers);
+
+  // Single byte ranges (Safari won't play media without them).
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (range && (range[1] || range[2])) {
+    const size = file.body.length;
+    let start = range[1] ? Number(range[1]) : size - Number(range[2]);
+    let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+    start = Math.max(0, start);
+    end = Math.min(end, size - 1);
+    if (start > end) return send(res, 416, null, { 'content-range': `bytes */${size}` });
+    const chunk = file.body.subarray(start, end + 1);
+    headers['content-range'] = `bytes ${start}-${end}/${size}`;
+    headers['content-length'] = chunk.length;
+    return send(res, 206, req.method === 'HEAD' ? null : chunk, headers);
+  }
+
   headers['content-length'] = file.body.length;
   return send(res, 200, req.method === 'HEAD' ? null : file.body, headers);
 }
@@ -175,6 +199,7 @@ server.listen(PORT, () => console.log(`[chassette] v${VERSION} listening on :${P
 
 function shutdown() {
   aggregator.stop();
+  broadcaster.flush();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();
 }

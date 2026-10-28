@@ -21,6 +21,9 @@ services:
       MAX_AGE_HOURS: ${MAX_AGE_HOURS:-72}
     volumes:
       - chassette-live:/srv/chassette
+      # Station timelines survive restarts/redeploys so live listeners stay in sync.
+      - chassette-data:/srv/data
 
 volumes:
   chassette-live:
+  chassette-data:

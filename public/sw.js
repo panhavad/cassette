@@ -8,7 +8,10 @@ const SHELL = [
   '/icons/icon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/fonts/PressStart2P-latin.woff2',
+  '/fonts/PressStart2P-latin-ext.woff2',
   '/fonts/TwemojiCountryFlags.woff2',
+  '/audio/hiss.wav',
 ];
 
 self.addEventListener('install', (event) => {
@@ -23,19 +26,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-first for the app shell and the news list so new deploys show up immediately;
-// cached copies are only used offline. Audio streams (cross-origin / range) are never touched.
+// Network-first for the app shell so new deploys show up immediately; cache is the offline fallback.
+// The live API, range requests and cross-origin audio streams are never intercepted.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin || req.headers.has('range')) return;
-  if (url.pathname.startsWith('/api/') && url.pathname !== '/api/news') return;
+  if (url.pathname.startsWith('/api/')) return;
 
   const key = req.mode === 'navigate' ? '/' : url.pathname;
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && res.status === 200) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(key, copy));
         }

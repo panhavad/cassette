@@ -3,57 +3,49 @@
 
   const $ = (id) => document.getElementById(id);
   const audio = $('audio');
-  const cassette = $('cassette');
-  const seek = $('seek');
   const VERSION = document.querySelector('meta[name="app-version"]').content;
-  const PLAYED_KEY = 'chassette:played';
-  const RESUME_KEY = 'chassette:resume';
   const COUNTRY_KEY = 'chassette:country';
-  const REFRESH_MS = 5 * 60 * 1000;
+  const LANG_KEY = 'chassette:language';
+  const WAS_LIVE_KEY = 'chassette:was-live';
+  const RELOADED_KEY = 'chassette:reloaded-at';
+  const HISS = '/audio/hiss.wav';
   const WORLDWIDE = 'WW';
+  const REFRESH_MS = 60 * 1000;
+  const RETRY_MS = 5000;
+  const DRIFT_CHECK_MS = 30 * 1000;
+  const MAX_DRIFT_S = 5;
+  const BAR_CELLS = 24;
+  const NEXT_SHOWN = 5;
 
-  let items = [];
-  let current = null;
-  const played = new Set(load(localStorage, PLAYED_KEY, []));
-  let updatePending = false;
+  // Server-synchronised clock: everyone on a station follows the same wall-clock schedule.
+  let clockOffset = 0;
+  const now = () => Date.now() + clockOffset;
+
+  let schedule = [];
+  let geo = { country: null, via: null, detected: null, detectedVia: null, countries: [], language: 'en', languages: ['en'] };
+  let live = false;
+  let mode = null; // 'news' | 'hiss'
+  let segment = null;
+  let loadToken = 0;
+  let switching = false;
   let blocked = false;
-  let errorStreak = 0;
-  let dragging = false;
-  let geo = { country: null, via: null, detected: null, detectedVia: null, countries: [] };
+  let updatePending = false;
+  let lastTry = 0;
+  let lastDrift = 0;
+  let fetching = null;
+  let signalLost = false;
 
-  function load(store, key, fallback) {
-    try {
-      const v = JSON.parse(store.getItem(key));
-      return v == null ? fallback : v;
-    } catch {
-      return fallback;
-    }
-  }
-  function save(store, key, value) {
-    try { store.setItem(key, JSON.stringify(value)); } catch { /* storage full or disabled */ }
-  }
-
-  const fmt = (sec) => {
-    if (!Number.isFinite(sec) || sec < 0) return '0:00';
-    sec = Math.floor(sec);
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = String(sec % 60).padStart(2, '0');
-    return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
-  };
-  const ago = (iso) => {
-    const s = (Date.now() - Date.parse(iso)) / 1000;
-    if (!Number.isFinite(s)) return '';
-    if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m ago`;
-    if (s < 86400) return `${Math.round(s / 3600)}h ago`;
-    return `${Math.round(s / 86400)}d ago`;
-  };
-  const indexOf = (item) => (item ? items.findIndex((i) => i.id === item.id) : -1);
-  const nextUnplayed = (exclude) => items.find((i) => !played.has(i.id) && (!exclude || i.id !== exclude.id));
+  /* Helpers */
 
   const regionNames = (() => {
     try { return new Intl.DisplayNames(['en'], { type: 'region' }); } catch { return null; }
   })();
+  const languageNames = (() => {
+    try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; }
+  })();
+  const languageOf = (code) => {
+    try { return (languageNames && languageNames.of(code)) || code; } catch { return code; }
+  };
   const flagOf = (code) => (code && /^[A-Z]{2}$/.test(code) && code !== WORLDWIDE
     ? String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0)))
     : '🌐');
@@ -62,109 +54,125 @@
     try { return (regionNames && regionNames.of(code)) || code; } catch { return code; }
   };
   const VIA = { manual: 'chosen by you', network: 'from your network', timezone: 'from your time zone', language: 'from your browser language', default: 'location unknown' };
-  const flagSpan = (code) => {
-    const s = document.createElement('span');
-    s.className = 'flag';
-    s.textContent = flagOf(code);
-    s.setAttribute('aria-hidden', 'true');
-    return s;
+  const fmt = (sec) => {
+    if (!Number.isFinite(sec) || sec < 0) sec = 0;
+    sec = Math.floor(sec);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = String(sec % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
   };
-
-  function setStatus(text) { $('status').textContent = text || ''; }
-
-  function markPlayed(item) {
-    if (!item || played.has(item.id)) return;
-    played.add(item.id);
-    save(localStorage, PLAYED_KEY, [...played].slice(-500));
-    renderQueue();
+  const clockText = (ms, seconds) => new Date(ms).toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hour12: false,
+  });
+  const onAir = () => {
+    const t = now();
+    return schedule.find((s) => s.start <= t && t < s.end) || null;
+  };
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
   }
 
   /* Rendering */
 
+  const bar = $('bar');
+  const cells = Array.from({ length: BAR_CELLS }, () => bar.appendChild(el('i')));
+
+  function render() {
+    renderNow();
+    renderProgress();
+    renderNext();
+    renderState();
+  }
+
+  function renderState() {
+    const playing = live && !audio.paused;
+    document.body.classList.toggle('live-on', live);
+    document.body.classList.toggle('playing', playing);
+    document.body.classList.toggle('blocked', blocked);
+    $('lamp').textContent = live ? 'ON AIR' : 'STOPPED';
+    const liveKey = $('live');
+    liveKey.setAttribute('aria-pressed', String(live));
+    $('stop').setAttribute('aria-pressed', String(!live));
+    let status = '';
+    if (blocked) status = 'PRESS LIVE TO TUNE IN';
+    else if (!schedule.length) status = 'NO SIGNAL · RETRYING';
+    else if (live && signalLost) status = 'SIGNAL LOST · NEXT STORY SOON';
+    $('status').textContent = status;
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+  }
+
+  function shown() {
+    return live && segment && now() < segment.end ? segment : onAir();
+  }
+
   function renderNow() {
-    if (!current) return;
-    $('labelFlag').textContent = flagOf(current.country);
-    $('labelSource').textContent = current.source;
-    $('labelTitle').textContent = current.title;
-    const title = $('nowTitle');
-    title.textContent = current.title;
-    title.href = current.link || current.sourceUrl;
+    const seg = shown();
+    $('labelFlag').textContent = seg ? flagOf(seg.country) : '';
+    $('labelSource').textContent = seg ? seg.source : 'NO TAPE';
+    $('labelTitle').textContent = seg ? seg.title : '';
+    $('nowTitle').textContent = seg ? seg.title : 'NO SIGNAL';
     const src = $('nowSource');
-    src.textContent = current.publisher && current.publisher !== current.source ? `${current.source} · ${current.publisher}` : current.source;
-    src.href = current.sourceUrl || current.link;
-    $('nowWhen').textContent = ago(current.published);
-    document.title = `${current.title} — Chassette`;
-  }
-
-  function divider(code, text) {
-    const li = document.createElement('li');
-    li.className = 'divider';
-    li.setAttribute('aria-hidden', 'true');
-    const label = document.createElement('span');
-    label.textContent = text;
-    li.append(flagSpan(code), label);
-    return li;
-  }
-
-  function renderQueue() {
-    const ol = $('queue');
-    const rows = [];
-    const local = geo.country && geo.country !== WORLDWIDE;
-    if (local && !items.some((i) => i.tier === 'local')) {
-      rows.push(divider(geo.country, `${nameOf(geo.country)} · no local audio yet`));
+    if (seg) {
+      src.textContent = seg.publisher && seg.publisher !== seg.source ? `${seg.source} · ${seg.publisher}` : seg.source;
+      src.href = seg.link || seg.sourceUrl;
+    } else {
+      src.textContent = '';
+      src.removeAttribute('href');
     }
-    let tier = null;
-    for (const item of items) {
-      if (local && item.tier !== tier) {
-        tier = item.tier;
-        rows.push(tier === 'local' ? divider(geo.country, `Local · ${nameOf(geo.country)}`) : divider(WORLDWIDE, 'World'));
-      }
-      rows.push(queueRow(item));
-    }
-    ol.replaceChildren(...rows);
+    document.title = seg ? `${live ? '▶ ' : ''}${seg.title} — Chassette` : 'Chassette';
   }
 
-  function queueRow(item) {
-    const li = document.createElement('li');
-    if (played.has(item.id)) li.classList.add('played');
-    if (current && item.id === current.id) li.classList.add('current');
+  function renderProgress() {
+    const t = now();
+    $('clock').textContent = clockText(t, true);
+    const seg = shown();
+    const total = seg ? (seg.end - seg.start) / 1000 : 0;
+    const elapsed = seg ? Math.min(total, Math.max(0, (t - seg.start) / 1000)) : 0;
+    const p = total ? elapsed / total : 0;
+    const lit = Math.round(p * BAR_CELLS);
+    cells.forEach((c, i) => c.classList.toggle('on', i < lit));
+    $('elapsed').textContent = fmt(elapsed);
+    $('remain').textContent = `-${fmt(total - elapsed)}`;
+    $('packL').setAttribute('r', String(3 + Math.round(6 * (1 - p))));
+    $('packR').setAttribute('r', String(3 + Math.round(6 * p)));
+  }
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    const t = document.createElement('span');
-    t.className = 'q-title';
-    t.textContent = item.title;
-    const m = document.createElement('span');
-    m.className = 'q-meta';
-    m.append(flagSpan(item.country), [item.source, ago(item.published), item.duration ? fmt(item.duration) : ''].filter(Boolean).join(' · '));
-    btn.append(t, m);
-    btn.addEventListener('click', () => play(item));
-
-    const a = document.createElement('a');
-    a.className = 'q-link';
-    a.href = item.link || item.sourceUrl;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = '↗';
-    a.title = `Open on ${item.source}`;
-    a.setAttribute('aria-label', `Open “${item.title}” on ${item.source}`);
-
-    li.append(btn, a);
-    return li;
+  let nextKey = '';
+  function renderNext() {
+    const t = now();
+    const current = shown();
+    const upcoming = schedule.filter((s) => s.start > t && (!current || s.key !== current.key)).slice(0, NEXT_SHOWN);
+    const key = upcoming.map((s) => s.key).join('|');
+    if (key === nextKey && key) return;
+    nextKey = key;
+    const ol = $('next');
+    if (!upcoming.length) {
+      ol.replaceChildren(el('li', 'empty', schedule.length ? 'END OF TAPE' : '—'));
+      return;
+    }
+    ol.replaceChildren(...upcoming.map((s) => {
+      const li = el('li');
+      const src = el('span', 'src');
+      src.append(el('span', 'flag', flagOf(s.country)), s.source);
+      li.append(el('span', 'at', `${s.projected ? '~' : ''}${clockText(s.start)}`), src, el('span', 'ttl', s.title));
+      return li;
+    }));
   }
 
   function renderWhere() {
     const { country, via, detected, detectedVia, countries } = geo;
     $('whereFlag').textContent = flagOf(country);
     $('whereName').textContent = nameOf(country);
-    $('where').title = `News prioritized for ${nameOf(country)} (${VIA[via] || via}). Tap to change.`;
-
+    $('where').title = `Station: ${nameOf(country)} (${VIA[via] || via}). Tap to change.`;
     const select = $('whereSelect');
-    const chosen = load(localStorage, COUNTRY_KEY, '');
+    const chosen = localStorage.getItem(COUNTRY_KEY) || '';
     const opt = (value, text) => {
-      const o = document.createElement('option');
+      const o = el('option', null, text);
       o.value = value;
-      o.textContent = text;
       return o;
     };
     const codes = [...new Set([...countries, detected].filter((c) => c && c !== WORLDWIDE))]
@@ -172,221 +180,273 @@
     select.replaceChildren(
       opt('', `Auto: ${flagOf(detected)} ${nameOf(detected)} (${VIA[detectedVia] || detectedVia})`),
       ...codes.map((c) => opt(c, `${flagOf(c)} ${nameOf(c)}`)),
-      opt(WORLDWIDE, '🌐 Worldwide (no priority)'),
+      opt(WORLDWIDE, '🌐 Worldwide'),
     );
     select.value = chosen;
+
+    const lang = geo.language || 'en';
+    $('langName').textContent = lang.toUpperCase();
+    $('langPill').title = `Language: ${languageOf(lang)}. Tap to change.`;
+    const langs = [...new Set(['en', ...geo.languages, lang])];
+    $('langSelect').replaceChildren(...langs.map((l) => opt(l, `${l.toUpperCase()} · ${languageOf(l)}${l === 'en' ? ' (default)' : ''}`)));
+    $('langSelect').value = lang;
   }
 
-  function setPlaying(on) {
-    document.body.classList.toggle('playing', on);
-    const btn = $('play');
-    btn.setAttribute('aria-pressed', String(on));
-    btn.setAttribute('aria-label', on ? 'Pause' : 'Play');
-    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = on ? 'playing' : 'paused';
-  }
-
-  function setBlocked(on) {
-    blocked = on;
-    document.body.classList.toggle('blocked', on);
-    setStatus(on ? 'Press ▶ to roll the tape' : '');
-  }
-
-  function setMediaSession() {
-    if (!('mediaSession' in navigator) || !current) return;
+  function setMediaSession(seg) {
+    if (!('mediaSession' in navigator) || !seg) return;
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: current.title,
-      artist: current.source,
-      album: 'Chassette',
+      title: seg.title,
+      artist: seg.source,
+      album: `Chassette · ${nameOf(geo.country)} · ${(geo.language || 'en').toUpperCase()} live`,
       artwork: [{ src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }],
     });
   }
 
-  /* Playback */
+  /* Live player */
 
   function tryPlay() {
-    if (!audio.src) return;
     const p = audio.play();
-    if (p) {
-      p.then(() => setBlocked(false)).catch((err) => {
-        if (err.name === 'NotAllowedError') setBlocked(true);
-      });
-    }
+    if (!p) return;
+    p.then(() => {
+      blocked = false;
+      renderState();
+    }).catch((err) => {
+      if (err.name !== 'NotAllowedError') return; // AbortError: superseded by a newer source
+      blocked = true;
+      live = false;
+      render();
+    });
   }
 
-  function play(item, startAt = 0) {
-    if (!item) return;
-    current = item;
-    audio.src = item.audio;
-    if (startAt > 0) audio.addEventListener('loadedmetadata', () => { audio.currentTime = startAt; }, { once: true });
-    cassette.style.setProperty('--p', '0');
-    renderNow();
-    renderQueue();
-    setMediaSession();
+  function setSource(url, loop) {
+    switching = true;
+    audio.loop = loop;
+    audio.src = url;
     tryPlay();
   }
 
-  function next() {
-    if (!items.length) return;
-    play(nextUnplayed(current) || items[(indexOf(current) + 1) % items.length]);
+  function loadSegment(seg) {
+    segment = seg;
+    mode = 'news';
+    signalLost = false;
+    lastDrift = Date.now();
+    const token = ++loadToken;
+    audio.addEventListener('loadedmetadata', () => {
+      if (token !== loadToken) return;
+      const offset = (now() - seg.start) / 1000;
+      if (Number.isFinite(audio.duration) && offset >= audio.duration - 0.5) playHiss();
+      else if (offset > 1) audio.currentTime = offset;
+    }, { once: true });
+    setSource(seg.audio, false);
+    setMediaSession(seg);
+    nextKey = '';
+    render();
   }
 
-  function skip() {
-    markPlayed(current);
-    next();
+  // Tape hiss fills the gap until the next story starts (story ended early or its stream failed).
+  function playHiss() {
+    mode = 'hiss';
+    ++loadToken;
+    setSource(HISS, true);
+    renderState();
   }
 
-  function prev() {
-    if (audio.currentTime > 5 || !items.length) {
-      audio.currentTime = 0;
+  function align() {
+    if (!live) return;
+    const seg = onAir();
+    if (!seg) {
+      if (mode !== 'hiss') playHiss();
+      if (Date.now() - lastTry > RETRY_MS) refresh();
       return;
     }
-    const i = indexOf(current);
-    play(items[(i - 1 + items.length) % items.length]);
+    if (segment && segment.key === seg.key) return;
+    if (updatePending && segment && document.visibilityState === 'visible') {
+      reloadForUpdate();
+      if (updatePending) return;
+    }
+    loadSegment(seg);
+    if (schedule.filter((s) => s.end > now()).length < 3) refresh();
   }
 
-  function toggle() {
-    if (!current) return;
-    if (audio.paused) tryPlay();
-    else audio.pause();
+  function correctDrift() {
+    if (!live || mode !== 'news' || !segment || audio.seeking || audio.paused) return;
+    lastDrift = Date.now();
+    const expected = (now() - segment.start) / 1000;
+    if (!Number.isFinite(audio.duration)) return;
+    if (expected >= audio.duration - 0.5) return;
+    if (Math.abs(audio.currentTime - expected) > MAX_DRIFT_S) audio.currentTime = expected;
   }
 
-  function start() {
-    const resume = load(sessionStorage, RESUME_KEY, null);
-    sessionStorage.removeItem(RESUME_KEY);
-    const resumed = resume && items.find((i) => i.id === resume.id);
-    if (resumed) play(resumed, resume.t || 0);
-    else play(nextUnplayed() || items[0]);
+  function goLive() {
+    live = true;
+    blocked = false;
+    segment = null;
+    mode = null;
+    const seg = onAir();
+    // Start audio synchronously so the tap counts as the user gesture that unlocks playback.
+    if (seg) loadSegment(seg);
+    else playHiss();
+    if (Date.now() - lastTry > 15000) refresh();
+    render();
   }
 
-  /* Data + updates */
+  function stop() {
+    live = false;
+    mode = null;
+    segment = null;
+    signalLost = false;
+    ++loadToken;
+    switching = true;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    switching = false;
+    render();
+    if (updatePending) reloadForUpdate();
+  }
 
-  function reloadForUpdate(keepPosition) {
-    if (keepPosition && current) save(sessionStorage, RESUME_KEY, { id: current.id, t: audio.currentTime });
+  // Picks up a new deploy. Remembers whether we were on air so the reload doesn't override STOP.
+  function reloadForUpdate() {
+    const last = Number(sessionStorage.getItem(RELOADED_KEY)) || 0;
+    if (Date.now() - last < 60000) {
+      updatePending = false;
+      return;
+    }
+    sessionStorage.setItem(RELOADED_KEY, String(Date.now()));
+    sessionStorage.setItem(WAS_LIVE_KEY, live ? '1' : '0');
     location.reload();
   }
 
-  function requestUpdate() {
-    if (updatePending) return;
-    updatePending = true;
-    if (navigator.serviceWorker) navigator.serviceWorker.getRegistration().then((r) => r && r.update()).catch(() => {});
-    // Never cut a story mid-sentence: update now if idle, otherwise at the end of the current track.
-    if (audio.paused) reloadForUpdate(true);
+  function tick() {
+    renderProgress();
+    if (Date.now() - lastTry > (schedule.length ? REFRESH_MS : RETRY_MS)) refresh();
+    if (!live) {
+      renderNow();
+      renderNext();
+      return;
+    }
+    const t = now();
+    if (!segment || t >= segment.end || t < segment.start) align();
+    else if (Date.now() - lastDrift > DRIFT_CHECK_MS) correctDrift();
   }
 
-  let refreshTimer = null;
-  let lastRefresh = 0;
+  /* Network */
 
-  async function refresh(retune = false) {
-    clearTimeout(refreshTimer);
-    lastRefresh = Date.now();
-    try {
+  function fetchLive() {
+    if (fetching) return fetching;
+    lastTry = Date.now();
+    fetching = (async () => {
       const params = new URLSearchParams();
       try { params.set('tz', Intl.DateTimeFormat().resolvedOptions().timeZone || ''); } catch { /* no Intl tz */ }
       params.set('lang', (navigator.languages || [navigator.language]).filter(Boolean).join(','));
-      const chosen = load(localStorage, COUNTRY_KEY, '');
+      const chosen = localStorage.getItem(COUNTRY_KEY);
       if (chosen) params.set('country', chosen);
-
-      const res = await fetch(`/api/news?${params}`, { cache: 'no-store' });
+      params.set('language', localStorage.getItem(LANG_KEY) || 'en');
+      const t0 = Date.now();
+      const res = await fetch(`/api/live?${params}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (data.version && data.version !== VERSION && VERSION !== '{{VERSION}}') requestUpdate();
+      const t1 = Date.now();
+      if (Number.isFinite(data.serverTime)) clockOffset = data.serverTime - (t0 + t1) / 2;
       geo = {
         country: data.country,
         via: data.countryVia,
         detected: data.detected,
         detectedVia: data.detectedVia,
         countries: Array.isArray(data.countries) ? data.countries : [],
+        language: data.language || 'en',
+        languages: Array.isArray(data.languages) ? data.languages : ['en'],
       };
-      items = Array.isArray(data.items) ? data.items : [];
-      renderWhere();
-      renderQueue();
-      if (!items.length) setStatus('No fresh audio on air yet — retrying…');
-      else if (retune) play(nextUnplayed() || items[0]);
-      else if (!current) start();
-    } catch {
-      if (!items.length) setStatus('Searching for signal…');
-    }
-    refreshTimer = setTimeout(refresh, items.length ? REFRESH_MS : 10000);
+      schedule = Array.isArray(data.schedule) ? data.schedule : [];
+      if (data.version && data.version !== VERSION && VERSION !== '{{VERSION}}') updatePending = true;
+      return data;
+    })().finally(() => {
+      fetching = null;
+    });
+    return fetching;
   }
 
-  $('whereSelect').addEventListener('change', (e) => {
-    const value = e.target.value;
-    if (value) save(localStorage, COUNTRY_KEY, value);
-    else localStorage.removeItem(COUNTRY_KEY);
-    refresh(true);
-  });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && Date.now() - lastRefresh > 60000) refresh();
-  });
+  async function refresh() {
+    try {
+      await fetchLive();
+      renderWhere();
+    } catch {
+      /* keep the schedule we have; retry on the next tick */
+    }
+    if (updatePending && !live) {
+      reloadForUpdate();
+      if (updatePending) return;
+    }
+    nextKey = '';
+    render();
+    align();
+  }
 
   /* Wiring */
 
-  audio.addEventListener('play', () => setPlaying(true));
-  audio.addEventListener('pause', () => setPlaying(false));
   audio.addEventListener('playing', () => {
-    errorStreak = 0;
-    setBlocked(false);
+    switching = false;
+    renderState();
   });
-  audio.addEventListener('timeupdate', () => {
-    const d = audio.duration;
-    const p = Number.isFinite(d) && d > 0 ? audio.currentTime / d : 0;
-    cassette.style.setProperty('--p', p.toFixed(4));
-    if (!dragging) seek.value = Math.round(p * 1000);
-    $('cur').textContent = fmt(audio.currentTime);
-    $('dur').textContent = fmt(d);
+  audio.addEventListener('play', renderState);
+  audio.addEventListener('pause', () => {
+    // Paused by the OS / headset / media keys rather than by us: treat as STOP.
+    if (live && !switching && !audio.ended) stop();
+    else renderState();
   });
   audio.addEventListener('ended', () => {
-    markPlayed(current);
-    if (updatePending) reloadForUpdate(false);
-    else next();
+    if (live && mode === 'news') playHiss();
   });
   audio.addEventListener('error', () => {
-    if (!current || !audio.getAttribute('src')) return;
-    errorStreak++;
-    markPlayed(current);
-    if (errorStreak >= items.length) {
-      setStatus('Tape jammed — no source is reachable right now');
-      return;
-    }
-    setStatus(`Couldn't load ${current.source} — skipping`);
-    setTimeout(next, 1200);
+    if (!live || mode !== 'news') return;
+    signalLost = true;
+    playHiss();
+  });
+  audio.addEventListener('timeupdate', tick);
+
+  $('live').addEventListener('click', goLive);
+  $('stop').addEventListener('click', stop);
+
+  $('whereSelect').addEventListener('change', (e) => {
+    if (e.target.value) localStorage.setItem(COUNTRY_KEY, e.target.value);
+    else localStorage.removeItem(COUNTRY_KEY);
+    segment = null;
+    refresh();
   });
 
-  seek.addEventListener('pointerdown', () => { dragging = true; });
-  seek.addEventListener('pointerup', () => { dragging = false; });
-  seek.addEventListener('input', () => {
-    if (Number.isFinite(audio.duration)) audio.currentTime = (seek.value / 1000) * audio.duration;
+  $('langSelect').addEventListener('change', (e) => {
+    if (e.target.value && e.target.value !== 'en') localStorage.setItem(LANG_KEY, e.target.value);
+    else localStorage.removeItem(LANG_KEY);
+    segment = null;
+    refresh();
   });
 
-  $('play').addEventListener('click', toggle);
-  $('next').addEventListener('click', skip);
-  $('prev').addEventListener('click', prev);
-
-  // Autoplay may be blocked until the first interaction; any tap on the page starts the tape.
-  const unlock = (e) => {
-    if (!blocked || e.target.closest('button, a, input, select')) return;
-    tryPlay();
-  };
-  document.addEventListener('pointerdown', unlock, true);
+  // If autoplay was blocked, the first tap anywhere tunes in.
+  document.addEventListener('pointerdown', (e) => {
+    if (blocked && !e.target.closest('button, a, select')) goLive();
+  }, true);
 
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('button, a, input, select')) return;
-    if (e.code === 'Space' || e.key === 'k') { e.preventDefault(); toggle(); }
-    else if (e.key === 'n') skip();
-    else if (e.key === 'p') prev();
-    else if (e.key === 'ArrowRight') audio.currentTime += 15;
-    else if (e.key === 'ArrowLeft') audio.currentTime = Math.max(0, audio.currentTime - 15);
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (live) stop();
+      else goLive();
+    } else if (e.key === 'l') goLive();
+    else if (e.key === 's') stop();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (live) {
+      align();
+      correctDrift();
+    }
+    if (Date.now() - lastTry > 30000) refresh();
   });
 
   if ('mediaSession' in navigator) {
-    const handlers = {
-      play: tryPlay,
-      pause: () => audio.pause(),
-      nexttrack: skip,
-      previoustrack: prev,
-      seekto: (d) => { audio.currentTime = d.seekTime; },
-    };
+    const handlers = { play: goLive, pause: stop, stop, nexttrack: null, previoustrack: null, seekto: null, seekbackward: null, seekforward: null };
     for (const [action, fn] of Object.entries(handlers)) {
       try { navigator.mediaSession.setActionHandler(action, fn); } catch { /* unsupported action */ }
     }
@@ -396,5 +456,13 @@
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
   }
 
-  refresh();
+  // Timer backup for UI + boundaries (media events drive switching while audio plays in the background).
+  setInterval(tick, 1000);
+
+  render();
+  const wasLive = sessionStorage.getItem(WAS_LIVE_KEY);
+  sessionStorage.removeItem(WAS_LIVE_KEY);
+  refresh().then(() => {
+    if (wasLive !== '0') goLive();
+  });
 })();

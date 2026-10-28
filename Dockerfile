@@ -5,7 +5,8 @@ RUN apk add --no-cache git tini
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8080 \
-    LIVE_DIR=/srv/chassette
+    LIVE_DIR=/srv/chassette \
+    DATA_DIR=/srv/data
 
 COPY package.json ./
 COPY server.js updater.js sources.json ./
@@ -15,7 +16,7 @@ COPY public ./public
 ARG GIT_SHA=dev
 ENV GIT_SHA=${GIT_SHA}
 
-RUN mkdir -p /srv/chassette && chown node:node /srv/chassette
+RUN mkdir -p /srv/chassette /srv/data && chown node:node /srv/chassette /srv/data
 USER node
 
 EXPOSE 8080

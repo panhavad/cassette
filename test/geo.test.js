@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveCountry, parseLanguages, rankForListener } = require('../lib/geo');
+const { resolveCountry, parseLanguages, rankForStation, normalizeLanguage } = require('../lib/geo');
 
 test('resolveCountry precedence: manual > network header > time zone > language', () => {
   const base = { headers: { 'cf-ipcountry': 'kr' }, tz: 'Asia/Tokyo', languages: ['en-US'] };
@@ -31,20 +31,25 @@ const ITEMS = [
   { id: 'de', country: 'DE', lang: 'de', scope: 'national', published: iso(1) },
 ];
 
-test('rankForListener puts local first, then world services, drops foreign domestic news', () => {
-  const ranked = rankForListener(ITEMS, { country: 'JP', languages: ['ja-JP', 'en'] });
-  assert.deepEqual(ranked.map((i) => `${i.id}:${i.tier}`), ['jp-ja:local', 'jp-en:local', 'bbc:world']);
+test('English by default: local first, then world services, foreign domestic news dropped', () => {
+  const ranked = rankForStation(ITEMS, { country: 'JP' });
+  assert.deepEqual(ranked.map((i) => `${i.id}:${i.tier}`), ['jp-en:local', 'bbc:world']);
 });
 
-test('rankForListener filters out languages the listener does not accept (English always kept)', () => {
-  const ranked = rankForListener(ITEMS, { country: 'JP', languages: ['en-US'] });
-  assert.deepEqual(ranked.map((i) => i.id), ['jp-en', 'bbc']);
-  const thai = rankForListener(ITEMS, { country: 'TH', languages: ['th'] });
-  assert.deepEqual(thai.map((i) => `${i.id}:${i.tier}`), ['th:world', 'bbc:world', 'jp-en:world']);
+test('a chosen language plays only that language, including other countries in it', () => {
+  assert.deepEqual(rankForStation(ITEMS, { country: 'JP', language: 'ja' }).map((i) => i.id), ['jp-ja']);
+  assert.deepEqual(rankForStation(ITEMS, { country: 'TH', language: 'th' }).map((i) => `${i.id}:${i.tier}`), ['th:world']);
+  assert.deepEqual(rankForStation(ITEMS, { country: 'JP', language: 'de' }).map((i) => i.id), ['de']);
 });
 
-test('rankForListener worldwide mode keeps everything audible, newest first', () => {
-  const ranked = rankForListener(ITEMS, { country: 'WW', languages: ['en'] });
+test('worldwide mode keeps everything in the language, newest first', () => {
+  const ranked = rankForStation(ITEMS, { country: 'WW', language: 'en' });
   assert.deepEqual(ranked.map((i) => i.id), ['us', 'bbc', 'jp-en']);
   assert.ok(ranked.every((i) => i.tier === 'world'));
+});
+
+test('normalizeLanguage falls back to English', () => {
+  assert.equal(normalizeLanguage('ja-JP'), 'ja');
+  assert.equal(normalizeLanguage(''), 'en');
+  assert.equal(normalizeLanguage('<script>'), 'en');
 });
