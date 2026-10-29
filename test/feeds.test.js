@@ -17,7 +17,8 @@ const FEED = `<?xml version="1.0"?>
   <item>
     <title>Morning &amp; evening: &#8220;quotes&#8221;</title>
     <link>https://example.com/ep1</link>
-    <description><![CDATA[<p>Long article text that must never be exposed.</p>]]></description>
+    <description><![CDATA[<p>Long article text about Cambodia that must never be exposed.</p>]]></description>
+    <category>Thailand</category>
     <enclosure type="audio/mpeg" length="123" url="https://cdn.example.com/ep1.mp3?x=1&amp;y=2"/>
     <pubDate>${hoursAgo(1)}</pubDate>
     <guid>ep-1</guid>
@@ -64,7 +65,6 @@ test('parseFeed keeps only audio items, with title/link/audio and no text body',
   assert.equal(first.type, 'audio/mpeg');
   assert.equal(first.duration, 754);
   assert.ok(first.id);
-  assert.ok(!JSON.stringify(feed).includes('Long article text'));
 
   assert.equal(feed.items[1].link, 'https://example.com/show', 'falls back to channel link');
 });
@@ -98,7 +98,9 @@ test('Aggregator applies freshness, per-source limit, source attribution and sur
   assert.equal(items[0].country, 'JP');
   assert.equal(items[0].lang, 'ja');
   assert.equal(items[0].scope, 'global');
-  assert.deepEqual(agg.countries(), ['JP']);
+  assert.deepEqual(items[0].mentions, ['KH', 'TH'], 'countries the story is about, from summary + categories');
+  assert.ok(!JSON.stringify(items).includes('Long article text'), 'summary text is used for tagging only, never kept');
+  assert.ok(items.every((i) => !('context' in i)));
   assert.ok(agg.updatedAt);
 
   const limited = new Aggregator([{ name: 'X', feed: 'https://example.com/feed.xml', limit: 1 }], { fetch, log: { info() {}, warn() {} } });

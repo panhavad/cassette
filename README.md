@@ -39,16 +39,29 @@ position; there is no seeking, skipping or rewinding.
 ## Language
 
 **English by default.** The `EN` pill lets a listener pick another available language (Japanese, German,
-French, Thai, Indonesian, Vietnamese, …). The station then plays only that language, home country first.
+French, Thai, Indonesian, Vietnamese, …). The station then plays only that language.
 
-## Location
+## Country: news ABOUT your country, from anywhere
 
-The flag pill shows the country the station is for. Tap it to pick another, or "Worldwide".
+The flag pill shows the station's country. A station plays news **about** that country from every
+publisher in the catalogue worldwide, not news from that country's own websites. A Cambodia listener hears
+any story that mentions Cambodia, Cambodians, Phnom Penh, Siem Reap… whether it's from the BBC, The Indian
+Express or The Straits Times.
 
-- Detection (first match wins): manual choice → CDN geo header (`CF-IPCountry`, `CloudFront-Viewer-Country`,
-  `X-Vercel-IP-Country`, …) → device time zone → browser language region. No third-party IP lookup is made.
-- Order: **local** publishers first, then **world** services (`"scope": "global"`). In English, other
-  countries' domestic news is left out.
+- **Tagging:** each story is tagged with the countries it's about, using its title plus short feed metadata
+  (summary, categories) and the article page's keyword tags. Only the country codes are kept; that text is
+  never stored or shown. Matching uses country names, demonyms, capitals, cities over 1M people and common
+  aliases ([lib/countries.json](lib/countries.json), built from Wikidata (CC0) with
+  `node scripts/build-countries.js`). Ambiguous words ("Georgia") need a second clue ("Tbilisi"), and
+  phrases like "Latin America" or "Mark Cuban" don't count. Non-English stories also match local country
+  names (カンボジア, Kambodscha).
+- **Order:** stories where the country is the main subject, then ones that mention it, newest first; then
+  international news (`"scope": "global"` sources) so the station never runs dry.
+- **Picker:** "In the news now" lists the countries with stories right now (and how many); any country can be
+  chosen. "Worldwide" plays everything, newest first.
+- **Default country** (first match wins): manual choice → CDN geo header (`CF-IPCountry`,
+  `CloudFront-Viewer-Country`, `X-Vercel-IP-Country`, …) → device time zone → browser language region. No
+  third-party IP lookup is made.
 
 ## Run
 
@@ -97,9 +110,9 @@ Common fields:
 | `publisher`   | publisher name                                       |
 | `feed`        | RSS/Atom feed URL                                    |
 | `site`        | link to the original source                          |
-| `country`     | ISO 3166 code of the publisher (`EU` for pan-European) |
+| `country`     | ISO 3166 code of the publisher (`EU` for pan-European); shown on the tape label, not used for station matching |
 | `lang`        | spoken language (`en`, `ja`, `de`, …)                |
-| `scope`       | `"global"` for international coverage; omit for domestic news |
+| `scope`       | `"global"` for international coverage (used as world-news filler); omit for domestic news |
 | `limit`       | newest N stories to keep (default `ITEMS_PER_SOURCE`) |
 | `scan`        | article sources: newest N articles to check (default 12) |
 | `maxAgeHours` | drop stories older than this (default `MAX_AGE_HOURS`) |
@@ -127,7 +140,8 @@ Durations come from the feed or player API. If those don't give one, they're mea
 npm test
 ```
 
-Generated assets: [lib/tz-countries.json](lib/tz-countries.json) (IANA tz database, `node scripts/build-tz-map.js`)
+Generated assets: [lib/tz-countries.json](lib/tz-countries.json) (IANA tz database, `node scripts/build-tz-map.js`),
+[lib/countries.json](lib/countries.json) (Wikidata, `node scripts/build-countries.js`)
 and [public/audio/hiss.wav](public/audio/hiss.wav) (`node scripts/build-hiss.js`).
 
 Audio and titles © their respective publishers. Pixel font: Press Start 2P (SIL OFL 1.1, see

@@ -225,7 +225,7 @@
     ol.replaceChildren(...upcoming.map((s) => {
       const li = el('li');
       const src = el('span', 'src');
-      src.append(el('span', 'flag', flagOf(s.country)), s.source);
+      src.append(el('span', 'flag', flagOf(s.flag || s.country)), s.source);
       const ttl = el('span', 'ttl marquee');
       setMarquee(ttl, s.title);
       li.append(el('span', 'at', `${s.projected ? '~' : ''}${clockText(s.start)}`), src, ttl);
@@ -234,25 +234,42 @@
     fitAll(ol);
   }
 
+  let whereKey = '';
   function renderWhere() {
     const { country, via, detected, detectedVia, countries } = geo;
+    const counts = geo.counts || {};
+    const n = counts[country] || 0;
     $('whereFlag').textContent = flagOf(country);
     $('whereName').textContent = nameOf(country);
-    $('where').title = `Station: ${nameOf(country)} (${VIA[via] || via}). Tap to change.`;
+    $('where').title = country === WORLDWIDE
+      ? 'Worldwide: all news, newest first. Tap to change.'
+      : `News about ${nameOf(country)} from around the world (${n} ${n === 1 ? 'story' : 'stories'} now) · ${VIA[via] || via}. Tap to change.`;
     const select = $('whereSelect');
     const chosen = localStorage.getItem(COUNTRY_KEY) || '';
-    const opt = (value, text) => {
-      const o = el('option', null, text);
-      o.value = value;
-      return o;
-    };
-    const codes = [...new Set([...countries, detected].filter((c) => c && c !== WORLDWIDE))]
-      .sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-    select.replaceChildren(
-      opt('', `Auto: ${flagOf(detected)} ${nameOf(detected)} (${VIA[detectedVia] || detectedVia})`),
-      ...codes.map((c) => opt(c, `${flagOf(c)} ${nameOf(c)}`)),
-      opt(WORLDWIDE, '🌐 Worldwide'),
-    );
+    const key = JSON.stringify([countries.length, counts, detected, detectedVia, chosen]);
+    if (key !== whereKey) {
+      whereKey = key;
+      const opt = (value, text) => {
+        const o = el('option', null, text);
+        o.value = value;
+        return o;
+      };
+      const group = (label, children) => {
+        const g = el('optgroup');
+        g.label = label;
+        g.append(...children);
+        return g;
+      };
+      const codes = [...new Set([...countries, detected].filter((c) => c && c !== WORLDWIDE))];
+      const byName = (a, b) => nameOf(a).localeCompare(nameOf(b));
+      const inNews = codes.filter((c) => counts[c] > 0).sort((a, b) => counts[b] - counts[a] || byName(a, b));
+      select.replaceChildren(
+        opt('', `Auto: ${flagOf(detected)} ${nameOf(detected)} (${VIA[detectedVia] || detectedVia})`),
+        opt(WORLDWIDE, '🌐 Worldwide'),
+        group('In the news now', inNews.map((c) => opt(c, `${flagOf(c)} ${nameOf(c)} · ${counts[c]}`))),
+        group('All countries', codes.slice().sort(byName).map((c) => opt(c, `${flagOf(c)} ${nameOf(c)}`))),
+      );
+    }
     select.value = chosen;
 
     const lang = geo.language || 'en';
@@ -477,6 +494,7 @@
         detected: data.detected,
         detectedVia: data.detectedVia,
         countries: Array.isArray(data.countries) ? data.countries : [],
+        counts: data.counts && typeof data.counts === 'object' ? data.counts : {},
         language: data.language || 'en',
         languages: Array.isArray(data.languages) ? data.languages : ['en'],
       };

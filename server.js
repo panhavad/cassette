@@ -5,7 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Aggregator } = require('./lib/feeds');
-const { resolveCountry, parseLanguages, normalizeLanguage } = require('./lib/geo');
+const { resolveCountry, parseLanguages, normalizeLanguage, countryCounts } = require('./lib/geo');
+const { countryCodes } = require('./lib/mentions');
 const { Broadcaster, stationKey } = require('./lib/station');
 const { Presence } = require('./lib/presence');
 
@@ -57,6 +58,7 @@ const broadcaster = new Broadcaster(() => aggregator.items, { file: path.join(DA
 const presence = new Presence();
 presence.start();
 const MAX_PRESENCE_BODY = 1024;
+const ALL_COUNTRIES = countryCodes();
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { ...SECURITY_HEADERS, ...headers });
@@ -158,7 +160,8 @@ async function handle(req, res) {
       countryVia: via,
       detected: detected.country,
       detectedVia: detected.via,
-      countries: aggregator.countries(),
+      countries: ALL_COUNTRIES,
+      counts: countryCounts(aggregator.items, language),
       language,
       languages: aggregator.languages(),
       listeners: presence.count(stationKey(country, language)),

@@ -9,12 +9,14 @@ const { Broadcaster, stationKey, GAP_MS } = require('../lib/station');
 
 const T0 = Date.UTC(2026, 9, 28, 12, 0, 0);
 const iso = (h) => new Date(T0 - h * 3600e3).toISOString();
+// `country` = the country the story is about (and, for simplicity here, its publisher's country).
 const item = (id, country, opts = {}) => ({
   id,
   title: `Story ${id}`,
   source: `Src ${id}`,
   audio: `https://cdn.example/${id}.mp3`,
   country,
+  mentions: [country],
   lang: 'en',
   scope: 'national',
   duration: 60,
