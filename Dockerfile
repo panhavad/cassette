@@ -16,7 +16,10 @@ COPY public ./public
 ARG GIT_SHA=dev
 ENV GIT_SHA=${GIT_SHA}
 
-RUN mkdir -p /srv/chassette /srv/data && chown node:node /srv/chassette /srv/data
+# COPY keeps the host's file modes; a checkout made with a strict umask (e.g. 077) would leave the
+# app unreadable for the non-root user. Make it world-readable (dirs traversable), still root-owned.
+RUN chmod -R u=rwX,go=rX /app \
+ && mkdir -p /srv/chassette /srv/data && chown node:node /srv/chassette /srv/data
 USER node
 
 EXPOSE 8080
