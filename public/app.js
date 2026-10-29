@@ -11,6 +11,7 @@
   const HISS = '/audio/hiss.wav';
   const WORLDWIDE = 'WW';
   const REFRESH_MS = 60 * 1000;
+  const PRESENCE_MS = 15 * 1000;
   const RETRY_MS = 5000;
   const DRIFT_CHECK_MS = 30 * 1000;
   const MAX_DRIFT_S = 5;
@@ -34,6 +35,40 @@
   let lastDrift = 0;
   let fetching = null;
   let signalLost = false;
+
+  // Listener presence. The id lives for the whole tab (reloads and navigating away and back reuse it),
+  // so a lost goodbye beacon can never make one tab count twice. A duplicated tab inherits the stored
+  // id; it asks the other open tabs and picks a fresh id if that one is already in use.
+  const SESSION_KEY = 'chassette:session';
+  const freshId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+  let sessionId = (() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      if (/^[0-9a-f]{32}$/.test(saved || '')) return saved;
+      const id = freshId();
+      sessionStorage.setItem(SESSION_KEY, id);
+      return id;
+    } catch {
+      return freshId();
+    }
+  })();
+  const tabs = 'BroadcastChannel' in window ? new BroadcastChannel('chassette-presence') : null;
+  if (tabs) {
+    tabs.onmessage = (e) => {
+      const msg = e.data || {};
+      if (msg.ask === sessionId) tabs.postMessage({ taken: sessionId });
+      else if (msg.taken === sessionId) {
+        sessionId = freshId();
+        try { sessionStorage.setItem(SESSION_KEY, sessionId); } catch { /* storage disabled */ }
+        heartbeat();
+      }
+    };
+    tabs.postMessage({ ask: sessionId });
+  }
+  let lastBeat = 0;
+  let beatChain = Promise.resolve();
+  let presenceKey = '';
+  let listeners = null;
 
   /* Helpers */
 
@@ -313,6 +348,55 @@
     if (Math.abs(audio.currentTime - expected) > MAX_DRIFT_S) audio.currentTime = expected;
   }
 
+  /* Listeners */
+
+  function presenceBody(onAir) {
+    return JSON.stringify({ id: sessionId, country: geo.country || WORLDWIDE, language: geo.language || 'en', live: onAir });
+  }
+
+  function setListeners(n) {
+    if (!Number.isFinite(n)) return;
+    const changed = listeners !== null && n !== listeners;
+    listeners = n;
+    $('listeners').textContent = String(n);
+    $('ears').title = `${n} ${n === 1 ? 'person is' : 'people are'} listening live to ${nameOf(geo.country)} · ${(geo.language || 'en').toUpperCase()} right now`;
+    if (changed) {
+      const ears = $('ears');
+      ears.classList.remove('bump');
+      void ears.offsetWidth;
+      ears.classList.add('bump');
+    }
+  }
+
+  // Heartbeats are chained so a stale "on air" can never land after a "stopped".
+  function heartbeat() {
+    if (!geo.country) return beatChain;
+    lastBeat = Date.now();
+    presenceKey = `${geo.country}:${geo.language}`;
+    beatChain = beatChain.then(async () => {
+      try {
+        const res = await fetch('/api/presence', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: presenceBody(live),
+          cache: 'no-store',
+          keepalive: true,
+        });
+        if (res.ok) setListeners((await res.json()).listeners);
+      } catch {
+        /* offline: the server drops us after its timeout */
+      }
+    });
+    return beatChain;
+  }
+
+  function leave() {
+    const body = new Blob([presenceBody(false)], { type: 'text/plain' });
+    if (!navigator.sendBeacon || !navigator.sendBeacon('/api/presence', body)) {
+      fetch('/api/presence', { method: 'POST', body, keepalive: true }).catch(() => {});
+    }
+  }
+
   function goLive() {
     live = true;
     blocked = false;
@@ -324,6 +408,7 @@
     else playHiss();
     if (Date.now() - lastTry > 15000) refresh();
     render();
+    heartbeat();
   }
 
   function stop() {
@@ -338,6 +423,7 @@
     audio.load();
     switching = false;
     render();
+    heartbeat();
     if (updatePending) reloadForUpdate();
   }
 
@@ -356,6 +442,7 @@
   function tick() {
     renderProgress();
     if (Date.now() - lastTry > (schedule.length ? REFRESH_MS : RETRY_MS)) refresh();
+    if (geo.country && Date.now() - lastBeat >= PRESENCE_MS) heartbeat();
     if (!live) {
       renderNow();
       renderNext();
@@ -404,8 +491,10 @@
 
   async function refresh() {
     try {
-      await fetchLive();
+      const data = await fetchLive();
       renderWhere();
+      setListeners(data.listeners);
+      if (`${geo.country}:${geo.language}` !== presenceKey) heartbeat();
     } catch {
       /* keep the schedule we have; retry on the next tick */
     }
@@ -494,6 +583,12 @@
 
   // Timer backup for UI + boundaries (media events drive switching while audio plays in the background).
   setInterval(tick, 1000);
+
+  // Leaving (close, reload, navigate away) stops counting us right away; bfcache restores re-join.
+  window.addEventListener('pagehide', leave);
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) heartbeat();
+  });
 
   // Re-measure scrolling titles once the pixel font is in and whenever the layout width changes.
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitAll());

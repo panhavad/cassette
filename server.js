@@ -6,10 +6,18 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { Aggregator } = require('./lib/feeds');
 const { resolveCountry, parseLanguages, normalizeLanguage } = require('./lib/geo');
-const { Broadcaster } = require('./lib/station');
+const { Broadcaster, stationKey } = require('./lib/station');
+const { Presence } = require('./lib/presence');
 
 const PORT = Number(process.env.PORT) || 8080;
 const VERSION = (process.env.GIT_SHA || 'dev').slice(0, 12);
+const APP_VERSION = (() => {
+  try {
+    return require('./package.json').version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+})();
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SOURCES_FILE = process.env.SOURCES_FILE || path.join(__dirname, 'sources.json');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -46,6 +54,9 @@ const aggregator = new Aggregator(JSON.parse(fs.readFileSync(SOURCES_FILE, 'utf8
 });
 aggregator.start(REFRESH_MS).catch((err) => console.error('[feeds] initial refresh failed', err));
 const broadcaster = new Broadcaster(() => aggregator.items, { file: path.join(DATA_DIR, 'stations.json') });
+const presence = new Presence();
+presence.start();
+const MAX_PRESENCE_BODY = 1024;
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { ...SECURITY_HEADERS, ...headers });
@@ -68,7 +79,9 @@ function loadStatic(pathname) {
   } catch {
     return null;
   }
-  if (TEMPLATED.has(rel)) body = Buffer.from(body.toString('utf8').replaceAll('{{VERSION}}', VERSION));
+  if (TEMPLATED.has(rel)) {
+    body = Buffer.from(body.toString('utf8').replaceAll('{{VERSION}}', VERSION).replaceAll('{{APP_VERSION}}', APP_VERSION));
+  }
   const entry = {
     body,
     type: MIME[path.extname(file)] || 'application/octet-stream',
@@ -96,14 +109,21 @@ function verifyHook(req, body) {
 
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
+    const declared = Number(req.headers['content-length']);
     const chunks = [];
     let size = 0;
+    const tooLarge = () => {
+      const err = new Error('too large');
+      err.tooLarge = true;
+      req.removeAllListeners('data');
+      req.resume(); // discard the rest; the 413 response closes the connection
+      reject(err);
+    };
+    if (declared > limit) return tooLarge();
     req.on('data', (c) => {
       size += c.length;
-      if (size > limit) {
-        reject(new Error('too large'));
-        req.destroy();
-      } else chunks.push(c);
+      if (size > limit) tooLarge();
+      else chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
@@ -141,11 +161,29 @@ async function handle(req, res) {
       countries: aggregator.countries(),
       language,
       languages: aggregator.languages(),
+      listeners: presence.count(stationKey(country, language)),
       schedule,
     });
   }
 
-  if (pathname === '/api/version') return sendJson(res, 200, { version: VERSION });
+  // Heartbeat from an open tab. Body: { id, country, language, live }. Also sent via sendBeacon on close.
+  if (pathname === '/api/presence') {
+    if (req.method !== 'POST') return send(res, 405, 'Method not allowed', { allow: 'POST' });
+    let data;
+    try {
+      data = JSON.parse((await readBody(req, MAX_PRESENCE_BODY)).toString('utf8'));
+    } catch (err) {
+      if (err.tooLarge) return send(res, 413, 'Payload too large', { connection: 'close' });
+      return send(res, 400, 'Bad request');
+    }
+    if (!data || !Presence.validId(data.id)) return send(res, 400, 'Bad request');
+    const { country } = resolveCountry({ override: data.country });
+    const station = stationKey(country, normalizeLanguage(data.language));
+    presence.beat(data.id, station, data.live === true);
+    return sendJson(res, 200, { listeners: presence.count(station) });
+  }
+
+  if (pathname === '/api/version') return sendJson(res, 200, { version: VERSION, release: APP_VERSION });
 
   if (pathname === '/api/hook') {
     if (req.method !== 'POST') return send(res, 405, 'Method not allowed', { allow: 'POST' });
@@ -153,7 +191,7 @@ async function handle(req, res) {
     try {
       body = await readBody(req, MAX_HOOK_BODY);
     } catch {
-      return send(res, 413, 'Payload too large');
+      return send(res, 413, 'Payload too large', { connection: 'close' });
     }
     if (!verifyHook(req, body)) return send(res, 401, 'Unauthorized');
     const queued = typeof process.send === 'function';
@@ -195,10 +233,11 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, () => console.log(`[chassette] v${VERSION} listening on :${PORT}`));
+server.listen(PORT, () => console.log(`[chassette] v${APP_VERSION} (${VERSION}) listening on :${PORT}`));
 
 function shutdown() {
   aggregator.stop();
+  presence.stop();
   broadcaster.flush();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();

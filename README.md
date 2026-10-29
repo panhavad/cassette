@@ -22,6 +22,11 @@ hears the same story at the same second. Opening the app (or pressing **LIVE**) 
 position; there is no seeking, skipping or rewinding.
 
 - Controls: **STOP** and **LIVE** only. `Space` toggles, `L` = live, `S` = stop.
+- **Listening now**: the display shows how many people are tuned in to the same station (country + language)
+  right now. Only tabs that are on air count. Each tab sends a heartbeat every 15 s (`POST /api/presence`);
+  stopped, closed or silent tabs drop out right away or within 35 s. Counts are kept in memory, so they rebuild
+  within one heartbeat after a restart, and with several server instances each one counts only its own listeners.
+- The footer shows the version: release from `package.json` · git commit of the running build.
 - The cassette rolls while on air (reels turn, tape runs past the head). Long titles scroll like a radio display.
 - **Up next** shows the coming stories with start times (`~` = forecast). It is display-only.
 - The server commits the current and next story per station. The rest is a forecast that can change when

@@ -80,6 +80,7 @@
         <span class="lamp" id="lamp">STOPPED</span>
         <span class="clock" id="clock">--:--:--</span>
       </div>
+      <div class="ears" id="ears" title="People listening live to this station right now"><i class="ico ico-ears" aria-hidden="true"></i><span id="listeners">--</span> LISTENING</div>
       <div class="now-title marquee" id="nowTitle"></div>
       <p class="now-src"><a id="nowSource" target="_blank" rel="noopener"></a></p>
       <div class="bar" id="bar" aria-hidden="true"></div>
@@ -98,7 +99,7 @@
       <ol id="next"></ol>
     </section>
 
-    <footer>AUDIO &amp; TITLES © THEIR PUBLISHERS<br>STREAMED FROM THE ORIGINAL SOURCE</footer>
+    <footer>AUDIO &amp; TITLES © THEIR PUBLISHERS<br>STREAMED FROM THE ORIGINAL SOURCE<br><span class="ver" title="Release and build (git commit)">CHASSETTE V{{APP_VERSION}} · {{VERSION}}</span></footer>
   </main>
   <audio id="audio" preload="auto"></audio>
 </body>
